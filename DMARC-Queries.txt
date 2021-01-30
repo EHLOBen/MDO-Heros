@@ -1,0 +1,18 @@
+// get the top 10 senders of DMARC failures into your org by RFC5322.From address
+EmailEvents 
+|where DetectionMethods contains "DMARC" and EmailDirection == "Inbound" and SenderFromDomain contains "YOUR-DOMAIN-HERE.ORG"
+|summarize count() by SenderFromAddress 
+| top 10 by count_ 
+| render columnchart 
+
+// get the top 10 senders of DMARC failures into your org by IPv4 address 
+EmailEvents 
+|where DetectionMethods contains "DMARC" and EmailDirection == "Inbound" and SenderFromDomain contains "YOUR-DOMAIN-HERE.ORG"
+|summarize count() by SenderIPv4 
+| top 10 by count_ 
+| render columnchart 
+
+// get the details of DMARC failures for a partial IP range
+EmailEvents
+|where DetectionMethods contains "DMARC" and EmailDirection == "Inbound" and SenderIPv4 contains "{XX.XXX.X. - EDIT ME}"
+| summarize count(NetworkMessageId) by SenderFromAddress, RecipientEmailAddress, SenderIPv4
