@@ -1,3 +1,7 @@
+// Advanced Hunting Query to find mail being detected as High Confidence Phish, and overriden by misconfiguration.
+// This will highlight anything secure by default will affect
+// Remove the ! infront of "!contains "Transport" to filter the mail which is being overriden by ETR (and not affected by secure by default)
+// Ben H - 2021
 EmailEvents
 | where ConfidenceLevel contains '"Phish":"High"' and EmailDirection == "Inbound" and OrgLevelPolicy !contains "Transport"and OrgLevelAction == "Allow"
 | project SenderFromAddress,SenderIPv4,RecipientEmailAddress,PhishDetectionMethod,OrgLevelAction,OrgLevelPolicy,NetworkMessageId
