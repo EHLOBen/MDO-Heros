@@ -1,0 +1,3 @@
+EmailEvents
+| where ConfidenceLevel contains '"Phish":"High"' and EmailDirection == "Inbound" and OrgLevelPolicy !contains "Transport"and OrgLevelAction == "Allow"
+| project SenderFromAddress,SenderIPv4,RecipientEmailAddress,PhishDetectionMethod,OrgLevelAction,OrgLevelPolicy,NetworkMessageId
