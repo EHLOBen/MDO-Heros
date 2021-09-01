@@ -1,4 +1,39 @@
-// **UPDATE** Advanced Hunting Query to find mail being detected as High Confidence Phish, and overriden by transport rules.
+// General hunting queries for finding entries in your allow lists you might not want - these are just a starting point :)
+// Remember, an empty allow list is a happy allow list.
+
+// Edit the summarise count() to pivot and explore transport rules causing overrides where there are no detected threats by us (aka we agree with your verdict, no need for an SCL-1 rule)
+
+EmailEvents
+| where OrgLevelAction == "Allow" and OrgLevelPolicy == "Exchange transport rule"  and ThreatTypes == ""
+|summarize count() by SenderFromDomain
+
+// Display the opposite of above, this is mail we believe to be bad that you're letting in via an ETR. - investigate and resolve the root cause if they are false positives (think authentication failures as this is a common reason) - or if not false positives remove to plug the gap that's being actively exploited by an attacker.
+
+EmailEvents
+| where OrgLevelAction == "Allow" and OrgLevelPolicy == "Exchange transport rule"  and ThreatTypes != ""
+
+// Edit the from domain and find mail in allow-lists you don't need (or where you're letting in malicious mail)
+EmailEvents 
+|where EmailDirection == "Inbound" and SenderFromDomain contains "gmail.com"
+|summarize count() by DetectionMethods
+
+// Edit the IP and then use this to find entries in your connection filter you don’t need (or where you're letting in malicious mail)
+EmailEvents 
+|where EmailDirection == "Inbound" and SenderIPv4 contains "{XX.XXX.X. - EDIT ME}"
+|summarize count() by DetectionMethods
+
+// Edit the senderfromaddress and then use this to find entries in your allow lists you don’t need (or where you're letting in malicious mail)
+EmailEvents 
+|where EmailDirection == "Inbound" and SenderFromAddress == "SOMEONE@DOMAIN.COM"
+|summarize count() by DetectionMethods
+
+// Query Hint to get you started for finding policies where switching from Junk to Quarantine could cause impact. - resolve these first to reduce noise and complaints when rolling out quarantine as a delivery location (if you deliver lots of false positives to the quarantine, end users often just start to associate that as an additional place to check rather than a location dangerous mail resides in)
+
+EmailEvents
+| where EmailActionPolicy != "" and EmailAction contains "junk"
+|summarize count() by EmailActionPolicy
+
+// Advanced Hunting Query to find mail being detected as High Confidence Phish, and overridden by transport rules.
 // This will highlight mail affected by the new secure by default updates : 
 https://techcommunity.microsoft.com/t5/microsoft-defender-for-office/mastering-configuration-in-defender-for-office-365-part-two/ba-p/2307134
 // Ben H - 2021
@@ -16,22 +51,3 @@ EmailEvents
 EmailEvents
 | where ConfidenceLevel contains '"Phish":"High"' and EmailDirection == "Inbound" and OrgLevelPolicy !contains "Transport"and OrgLevelAction == "Allow"
 | project SenderFromAddress,SenderIPv4,RecipientEmailAddress,PhishDetectionMethod,OrgLevelAction,OrgLevelPolicy,NetworkMessageId
-
-
-
-// General hunting queries for finding entires in your allow lists you might not want - these are just a starting point :)
-
-// Edit the from domain and find mail in your allow-lists you don't need (or where you're letting in malicious mail)
-EmailEvents 
-|where EmailDirection == "Inbound" and SenderFromDomain contains "gmail.com"
-|summarize count() by DetectionMethods
-
-// Edit the IP and then use this to find entries in your connection filter you dont need (or where you're letting in malicious mail)
-EmailEvents 
-|where EmailDirection == "Inbound" and SenderIPv4 contains "{XX.XXX.X. - EDIT ME}"
-|summarize count() by DetectionMethods
-
-// Edit the senderfromaddress and then use this to find entries in your allow lists you dont need (or where you're letting in malicious mail)
-EmailEvents 
-|where EmailDirection == "Inbound" and SenderFromAddress == "SOMEONE@DOMAIN.COM"
-|summarize count() by DetectionMethods
