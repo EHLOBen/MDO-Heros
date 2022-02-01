@@ -16,3 +16,11 @@ EmailEvents
 EmailEvents
 |where DetectionMethods contains "DMARC" and EmailDirection == "Inbound" and SenderIPv4 contains "{XX.XXX.X. - EDIT ME}"
 | summarize count(NetworkMessageId) by SenderFromAddress, RecipientEmailAddress, SenderIPv4
+
+// Expand the new Authentication results column, and format the data for analysis in Excel or similar.
+
+EmailEvents
+| extend ParsedFields=parse_json(AuthenticationDetails)
+| extend DKIM=ParsedFields.DKIM,SPF=ParsedFields.SPF,DMARC=ParsedFields.DMARC,CompAuth=ParsedFields.CompAuth
+|where DetectionMethods contains "DMARC" and EmailDirection == "Inbound"
+| project NetworkMessageId,Timestamp,SenderMailFromAddress,SenderFromAddress,SenderDisplayName,SenderMailFromDomain,SenderFromDomain,SenderIPv4,RecipientEmailAddress,Subject,DeliveryAction,DeliveryLocation,OrgLevelAction,OrgLevelPolicy,DKIM,SPF,DMARC,CompAuth
