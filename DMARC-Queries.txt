@@ -21,6 +21,6 @@ EmailEvents
 
 EmailEvents
 | extend ParsedFields=parse_json(AuthenticationDetails)
-| extend DKIM=ParsedFields.DKIM,SPF=ParsedFields.SPF,DMARC=ParsedFields.DMARC,CompAuth=ParsedFields.CompAuth
-|where DetectionMethods contains "DMARC" and EmailDirection == "Inbound"
-| project NetworkMessageId,Timestamp,SenderMailFromAddress,SenderFromAddress,SenderDisplayName,SenderMailFromDomain,SenderFromDomain,SenderIPv4,RecipientEmailAddress,Subject,DeliveryAction,DeliveryLocation,OrgLevelAction,OrgLevelPolicy,DKIM,SPF,DMARC,CompAuth
+| evaluate bag_unpack(ParsedFields)
+| where DetectionMethods contains "Spoof" and EmailDirection == "Inbound"
+| project NetworkMessageId,Timestamp,SenderMailFromAddress,SenderFromAddress,SenderDisplayName,SenderMailFromDomain,SenderFromDomain,SenderIPv4,RecipientEmailAddress,Subject,DetectionMethods,DeliveryAction,DeliveryLocation,OrgLevelAction,OrgLevelPolicy,DKIM,SPF,DMARC,CompAuth
