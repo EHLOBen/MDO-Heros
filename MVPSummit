@@ -1,0 +1,40 @@
+// Lets start by finding the main culprits of allows with detected threats to emphasise the importance of this work
+
+EmailEvents
+| where OrgLevelAction == "Allow" and ThreatTypes != ""
+|summarize count() by OrgLevelPolicy
+
+// Lets pivot to what we are letting in via allows by detection tech
+
+EmailEvents
+| where OrgLevelAction == "Allow" and ThreatTypes != ""
+|summarize count() by DetectionMethods
+
+// add more data to spot patterns if you want, remove pivot and play - head off into the email entity page to grab headers etc!
+
+EmailEvents
+| where OrgLevelAction == "Allow" and ThreatTypes != ""
+|summarize count() by SenderIPv4, SenderMailFromDomain, SenderFromDomain, OrgLevelPolicy, DetectionMethods
+
+// So we don't offer you DMARC reports for incoming mail, but that's OK. - the data is there for the taking if we go looking!
+
+
+
+// Find mail which is likely to be from 3rd parties without correct auth setup, or pivot via IP
+
+EmailEvents 
+|where DetectionMethods contains "DMARC" and EmailDirection == "Inbound" and SenderFromDomain contains "YOUR-DOMAIN-HERE.ORG"
+|summarize count() by SenderFromAddress 
+| top 10 by count_ 
+| render columnchart 
+
+//Want to export the data and visualise it elsewhere?
+
+EmailEvents
+| extend ParsedFields=parse_json(AuthenticationDetails)
+| evaluate bag_unpack(ParsedFields)
+| where DetectionMethods contains "Spoof" and EmailDirection == "Inbound"
+| project NetworkMessageId,Timestamp,SenderMailFromAddress,SenderFromAddress,SenderDisplayName,SenderMailFromDomain,SenderFromDomain,SenderIPv4,RecipientEmailAddress,Subject,DetectionMethods,DeliveryAction,DeliveryLocation,OrgLevelAction,OrgLevelPolicy,DKIM,SPF,DMARC,CompAuth
+
+// Did you see the new hunting experience?
+// What about Explorer? how can that help!?
