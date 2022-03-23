@@ -16,6 +16,25 @@ EmailEvents
 | where OrgLevelAction == "Allow" and ThreatTypes != ""
 |summarize count() by SenderIPv4, SenderMailFromDomain, SenderFromDomain, OrgLevelPolicy, DetectionMethods
 
+// You can also do the reverse of our first command to spot overrides we don't need!
+
+EmailEvents
+| where OrgLevelAction == "Allow" and ThreatTypes == ""
+|summarize count() by OrgLevelPolicy
+
+// pivot to the top senders we override, then check their mailflow pattern
+
+EmailEvents
+| where OrgLevelAction == "Allow" and ThreatTypes == ""
+|summarize count() by SenderFromAddress
+
+EmailEvents
+| where SenderFromAddress == "horms@verge.net.au"
+|summarize count() by DetectionMethods
+
+// neat huh?!
+
+
 // So we don't offer you DMARC reports for incoming mail, but that's OK. - the data is there for the taking if we go looking!
 
 
