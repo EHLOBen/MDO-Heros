@@ -39,13 +39,13 @@ EmailEvents
 
 
 
-// Find mail which is likely to be from 3rd parties without correct auth setup, or pivot via IP
+// Find mail which is likely to be from 3rd parties without correct auth setup, pivoted by IP to begin with
 
-EmailEvents 
-|where DetectionMethods contains "DMARC" and EmailDirection == "Inbound" and SenderFromDomain contains "YOUR-DOMAIN-HERE.ORG"
-|summarize count() by SenderFromAddress 
-| top 10 by count_ 
-| render columnchart 
+EmailEvents
+| where DetectionMethods contains "DMARC" and EmailDirection == "Inbound" and SenderFromDomain contains "ppartyka.pl"
+| summarize count() by SenderIPv4
+| top 10 by count_
+| render columnchart
 
 //Want to export the data and visualise it elsewhere?
 
