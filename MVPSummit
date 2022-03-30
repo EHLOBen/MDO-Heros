@@ -28,9 +28,17 @@ EmailEvents
 | where OrgLevelAction == "Allow" and ThreatTypes == ""
 |summarize count() by SenderFromAddress
 
+// Let's pivot to a user being overridden and look at their history in terms of detections
+
 EmailEvents
 | where SenderFromAddress == "horms@verge.net.au"
-|summarize count() by DetectionMethods
+|summarize count() by DetectionMethods,OrgLevelAction,OrgLevelPolicy
+
+// lets find the culprit ETR 
+
+EmailEvents
+| where SenderFromAddress == "horms@verge.net.au"
+| take 1
 
 // neat huh?!
 
