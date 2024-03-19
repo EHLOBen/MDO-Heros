@@ -1,0 +1,55 @@
+Get all phish and malware mailflow...
+
+let _startTime = datetime(2024-02-28T11:22:15Z);
+let _endTime = datetime(2024-03-15T11:22:15Z);
+EmailEvents
+| where Timestamp between (_startTime .. _endTime)
+| extend MDO_detection = parse_json(DetectionMethods)
+| extend FirstDetection = iif(isempty(MDO_detection), "Clean", tostring(bag_keys(MDO_detection)[0]))
+| extend FirstSubcategory = iif(FirstDetection != "Clean" and array_length(MDO_detection[FirstDetection]) > 0, strcat(FirstDetection, ": ", tostring(MDO_detection[FirstDetection][0])), "No Detection (clean)")
+| where FirstSubcategory contains "Malware" or FirstSubcategory contains "Phish"
+| summarize count(NetworkMessageId)
+
+Take admin submissions, join email events to find true miss, and true miss numbers..
+
+let _startTime = datetime(2024-02-28T11:22:15Z);
+let _endTime = datetime(2024-03-15T11:22:15Z);
+CloudAppEvents
+| where Timestamp between (_startTime .._endTime)
+| where ActionType == "AdminSubmission"
+| extend SubmissionType = tostring((parse_json(RawEventData)).SubmissionType)
+| extend NetworkMessageId = tostring((parse_json(RawEventData)).ObjectId)
+| where SubmissionType in ("1","2")
+|join EmailEvents on NetworkMessageId
+| where ThreatTypes !contains "Phish" or ThreatTypes !contains "Malware"
+| summarize count(NetworkMessageId)
+
+
+Get all ZAP events, for phish and malware... (this includes everything, so lets filter it more.)
+
+let _startTime = datetime(2024-02-16T18:10:09Z);
+let _endTime = datetime(2024-03-14T18:10:09Z);
+EmailPostDeliveryEvents | where ActionType in ("Malware ZAP","Phish ZAP") and Timestamp between (_startTime .._endTime )
+| summarize count() by ActionResult
+
+Get FPs we reverse-zapped..
+
+let _startTime = datetime(2024-02-16T18:10:09Z);
+let _endTime = datetime(2024-03-14T18:10:09Z);
+EmailPostDeliveryEvents | where ActionType == "Redelivery" and Timestamp between (_startTime .._endTime )
+| summarize count()
+
+
+Lets work out the math...
+
+Our working equation today is:
+
+                Admin Submissions + User / Admin Triaged ZAP
+________________________________________________________________________________
+(Malware/Phish Mailflow) plus (Admin Submissions) plus (FN ZAPs) minus (FP ZAPs)
+
+
+this means we take everything you tell us was bad, everything you removed yourself (and beat ZAP to remediating), then divide it by the total bad in the tenant, removing any FPs
+
+
+
