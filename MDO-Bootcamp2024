@@ -51,5 +51,15 @@ ________________________________________________________________________________
 
 this means we take everything you tell us was bad, everything you removed yourself (and beat ZAP to remediating), then divide it by the total bad in the tenant, removing any FPs
 
+MORE GOODNESS?!
+
+
+Scott's Quarantine Query...
+
+EmailPostDeliveryEvents
+| where Action == "Quarantine release"
+| summarize arg_min(Timestamp,*) by NetworkMessageId,RecipientEmailAddress
+| join kind=leftouter (EmailEvents | where DeliveryLocation == "Quarantine") on NetworkMessageId
+| summarize count() by 	SenderFromDomain,bin(Timestamp1,1d),DetectionMethods1,OrgLevelPolicy,UserLevelPolicy
 
 
