@@ -1,0 +1,42 @@
+let _startTime = datetime(2024-02-19T17:15:55Z);
+let _endTime = datetime(2024-03-20T16:15:55Z);
+let Mal_Phish_Mailflow = toscalar(
+EmailEvents
+| where Timestamp between (_startTime .. _endTime)
+| extend MDO_detection = parse_json(DetectionMethods)
+| extend FirstDetection = iif(isempty(MDO_detection), "Clean", tostring(bag_keys(MDO_detection)[0]))
+| extend FirstSubcategory = iif(FirstDetection != "Clean" and array_length(MDO_detection[FirstDetection]) > 0, strcat(FirstDetection, ": ", tostring(MDO_detection[FirstDetection][0])), "No Detection (clean)")
+| where FirstSubcategory contains "Malware" or FirstSubcategory contains "Phish"
+| summarize count(NetworkMessageId)
+);
+let FP_ZAP = toscalar(
+EmailPostDeliveryEvents | where ActionType == "Redelivery"
+| summarize count(NetworkMessageId)
+);
+let FN_ZAP_Successful = toscalar(
+EmailPostDeliveryEvents | where ActionType in ("Malware ZAP","Phish ZAP") and Timestamp between (_startTime .._endTime )and ActionResult in ("Success","AdminPolicy")
+| summarize count(NetworkMessageId)
+);
+let FN_ZAP_Unsuccessful = toscalar(
+EmailPostDeliveryEvents | where ActionType in ("Malware ZAP","Phish ZAP") and Timestamp between (_startTime .._endTime )and ActionResult !in ("Success","AdminPolicy")
+| summarize count(NetworkMessageId)
+);
+let FN_Admin_Submissions = toscalar(
+CloudAppEvents
+| where Timestamp between (_startTime .._endTime)
+| where ActionType == "AdminSubmission"
+| extend SubmissionType = tostring((parse_json(RawEventData)).SubmissionType)
+| extend NetworkMessageId = tostring((parse_json(RawEventData)).ObjectId)
+| where SubmissionType in ("1","2")
+|join EmailEvents on NetworkMessageId
+| where ThreatTypes !contains "Phish" or ThreatTypes !contains "Malware"
+| summarize count(NetworkMessageId)
+);
+print
+Mal_Phish_Mailflow_Minus_FPs = toreal((Mal_Phish_Mailflow)-toreal(FP_ZAP)),
+FNs_Submitted = toreal(FN_Admin_Submissions),
+FPs_Reverse_Zapped = toreal(FP_ZAP),
+Mal_Phish_Zapped = toreal(FN_ZAP_Successful),
+Mal_Phish_NotZapped = toreal(FN_ZAP_Unsuccessful),
+Effectiveness_PostDelivery = round(((toreal(FN_Admin_Submissions)+toreal(FN_ZAP_Unsuccessful))/(toreal(Mal_Phish_Mailflow)+toreal(FN_ZAP_Successful)+toreal(FN_ZAP_Unsuccessful)+toreal(FN_Admin_Submissions)-toreal(FP_ZAP))*100-100),2),
+Effectiveness_PreDelivery = round(((toreal(FN_Admin_Submissions)+toreal(FN_ZAP_Unsuccessful)+(FN_ZAP_Successful))/(toreal(Mal_Phish_Mailflow)+toreal(FN_ZAP_Successful)+toreal(FN_ZAP_Unsuccessful)+toreal(FN_Admin_Submissions)-toreal(FP_ZAP))*100-100),2)
