@@ -1,0 +1,62 @@
+EmailPostDeliveryEvents
+| where NetworkMessageId == "c6fa5153-3f33-4911-3680-08dc80d0a063"
+
+Email delivery summaries
+
+EmailEvents
+| where Timestamp between (_startTime .. _endTime)
+| where EmailDirection == "Inbound"
+| extend MDO_detection = parse_json(DetectionMethods)
+| extend FirstDetection = iif(isempty(MDO_detection), "Clean", tostring(bag_keys(MDO_detection)[0]))
+| extend FirstSubcategory = iif(FirstDetection != "Clean" and array_length(MDO_detection[FirstDetection]) > 0, strcat(FirstDetection, ": ", tostring(MDO_detection[FirstDetection][0])), "No Detection (clean)")
+//| summarize count() by FirstDetection
+| summarize count() by FirstSubcategory
+
+ZAP Summaries
+
+EmailPostDeliveryEvents
+| where ActionType contains "ZAP" and Timestamp between (_startTime .._endTime ) and ActionResult == "Success"
+| summarize count() by ActionType
+
+Override Summaries
+
+EmailEvents
+| where ThreatTypes != "" and OrgLevelAction == "Allow" and Timestamp between (_startTime .._endTime )
+| summarize count() by OrgLevelPolicy
+
+ETR Blocks
+
+EmailEvents
+| where ThreatTypes == "" and OrgLevelAction == "Block" and Timestamp between (_startTime .._endTime ) and OrgLevelPolicy == "Exchange transport rule"
+| summarize count()
+
+Manual Cleanup
+
+EmailPostDeliveryEvents
+| where ActionType == "Manual Remediation" and Timestamp between (_startTime .._endTime )
+| summarize count() by Action
+
+Blocked / Allowed clicks by workload
+
+UrlClickEvents
+| summarize count() by ActionType,Workload 
+
+ZAP Timeline
+
+EmailPostDeliveryEvents
+| where ActionType contains "ZAP" and Timestamp between (_startTime .._endTime ) and ActionResult == "Success"
+  | join kind=inner  (
+        EmailEvents
+        | where Timestamp between (['_startTime'] .. ['_endTime'])
+        | project NetworkMessageId,RecipientEmailAddress,Timestamp)
+        on NetworkMessageId,RecipientEmailAddress
+        | extend TimeDiff = datetime_diff('minute', Timestamp, Timestamp1)
+        | summarize AVG_ZAP = avg(TimeDiff)
+
+
+Emails by "Market" (Domain)
+
+EmailEvents
+| where ThreatTypes != "" and Timestamp between (_startTime .._endTime )
+| extend Market = tostring(split(RecipientEmailAddress, '@')[1])
+| summarize count() by Market
