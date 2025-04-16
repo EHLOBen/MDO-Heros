@@ -1,0 +1,22 @@
+//In this query, we grab an external URL feed and check for messages with URLs that match
+let PhishingURLs = externaldata(url: string)
+[
+    "https://openphish.com/feed.txt"
+]
+with (format="txt");
+EmailUrlInfo
+| where Url in (PhishingURLs)
+| join EmailEvents on NetworkMessageId
+
+//------------------
+
+//In this query, we hunt for inbound emails having URLs from QR codes and suspicious keywords in subject
+let SubjectKeywords = ()
+  {pack_array("authorize", "authenticate", "account", "confirmation", "QR", "login", "password",  "payment", "urgent", "verify");};
+  EmailEvents
+  | where Timestamp > ago(30d)
+  | where EmailDirection == "Inbound"
+  | where DeliveryAction == "Delivered"
+  | where Subject has_any (SubjectKeywords)
+  | join EmailUrlInfo on NetworkMessageId
+  | where UrlLocation == "QRCode"
