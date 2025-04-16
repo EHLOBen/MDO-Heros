@@ -1,0 +1,11 @@
+let Quarantine_Releases = toscalar(EmailPostDeliveryEvents
+| where Action == "Quarantine release" and Timestamp >= ago(30d)
+| summarize arg_min(Timestamp,*) by NetworkMessageId,RecipientEmailAddress
+| join kind=leftouter (EmailEvents | where DeliveryLocation == "Quarantine") on NetworkMessageId
+| summarize count(NetworkMessageId));
+let Quarantined_Mailfow = toscalar(EmailEvents | where DeliveryLocation == "Quarantine" and Timestamp >= ago(30d)
+| summarize count(NetworkMessageId));
+print
+Quarantine_Releases = toreal(Quarantine_Releases),
+Quarantined_Mailflow = toreal(Quarantined_Mailfow),
+Release_Percentage = abs(round(((toreal(Quarantine_Releases)/toreal(Quarantined_Mailfow))*100),2))
