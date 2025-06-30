@@ -1,0 +1,7 @@
+//Clicks Blocked by threat
+//
+UrlClickEvents
+| where Workload == "Teams" and ActionType == "ClickBlocked"
+| summarize count() by ThreatTypes
+//
+
