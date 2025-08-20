@@ -1,0 +1,5 @@
+UrlClickEvents
+| where ActionType contains "Blocked"
+| summarize count() by Url
+| top 5 by count_
+| sort by count_ desc 
