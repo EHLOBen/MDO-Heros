@@ -1,9 +1,9 @@
 let Quarantine_Releases = toscalar(EmailPostDeliveryEvents
 | where Action == "Quarantine release" and Timestamp >= ago(30d)
 | summarize arg_min(Timestamp,*) by NetworkMessageId,RecipientEmailAddress
-| join kind=leftouter (EmailEvents | where DeliveryLocation == "Quarantine") on NetworkMessageId
+| join kind=leftouter (EmailEvents | where DeliveryLocation == "Quarantine" and EmailDirection == "Inbound") on NetworkMessageId
 | summarize count(NetworkMessageId));
-let Quarantined_Mailfow = toscalar(EmailEvents | where DeliveryLocation == "Quarantine" and Timestamp >= ago(30d)
+let Quarantined_Mailfow = toscalar(EmailEvents | where DeliveryLocation == "Quarantine" and Timestamp >= ago(30d) and EmailDirection == "Inbound"
 | summarize count(NetworkMessageId));
 print
 Quarantine_Releases = toreal(Quarantine_Releases),
