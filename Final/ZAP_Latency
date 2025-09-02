@@ -1,0 +1,14 @@
+let _startTime = ago(30d);
+let _endTime = now();
+EmailPostDeliveryEvents
+| where ActionType contains "ZAP" and Timestamp between (_startTime .._endTime ) and ActionResult == "Success" and ActionType in ("Malware ZAP","Phish ZAP")
+| extend Key = strcat(NetworkMessageId , "-", RecipientEmailAddress) 
+| summarize arg_max(Timestamp, *) by Key 
+  | join kind=inner  (
+        EmailEvents
+        | where Timestamp between (['_startTime'] .. ['_endTime'])
+        | where ThreatTypes !contains "Phish" and ThreatTypes !contains "Malware" 
+        | project NetworkMessageId,RecipientEmailAddress,Timestamp)
+        on NetworkMessageId,RecipientEmailAddress
+        | extend TimeDiff = datetime_diff('minute', Timestamp, Timestamp1)
+        | summarize Average_Zap = avg(TimeDiff), percentiles((TimeDiff),50,80,90,99)
