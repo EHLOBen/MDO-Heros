@@ -1,0 +1,241 @@
+//(1)
+
+let _startTime = ago(30d); 
+let _endTime = now(); 
+// Get all mailflow detected as clean at time of delivery 
+let EmailEventsClean = materialize( 
+    EmailEvents 
+    | where Timestamp between (_startTime .. _endTime) and EmailDirection == "Inbound" 
+    //| where ThreatTypes !contains "Phish" and ThreatTypes !contains "Malware" // UN-comment this when using sentinel or another streaming SIEM (line 10).
+    // this alteration is due to the threat types being updated directly within advanced hunting.
+    | where DeliveryLocation != "Quarantine" // comment out this line if you uncomment line 10, as it's only required for advanced hunting.
+    | project NetworkMessageId,ThreatTypes 
+); 
+// Get all mailflow detected as phish or malware at time of delivery 
+let EmailEventsThreats = materialize( 
+    EmailEvents 
+    | where Timestamp between (_startTime .. _endTime) and EmailDirection == "Inbound" 
+    | where ThreatTypes contains "Phish" or ThreatTypes contains "Malware" 
+    | extend MDO_detection = parse_json(DetectionMethods) 
+    | extend FirstDetection = iif(isempty(MDO_detection), "Clean", tostring(bag_keys(MDO_detection)[0])) 
+    | extend FirstSubcategory = iif(FirstDetection != "Clean" and array_length(MDO_detection[FirstDetection]) > 0, strcat(FirstDetection, ": ", tostring(MDO_detection[FirstDetection][0])), "No Detection (clean)") 
+    | project NetworkMessageId,FirstDetection,FirstSubcategory,MDO_detection,ThreatTypes 
+); 
+// Get all post delivery ZAP / Redelivery events, and arg_max them to ensure we have the latest verdict to work with for each 
+let EmailPostDeliveryFiltered = materialize( 
+    EmailPostDeliveryEvents 
+    | where Timestamp between (_startTime .. datetime_add('day', 7, _endTime)) 
+    | where ActionType in ("Malware ZAP","Phish ZAP","Redelivery") 
+    | extend Key = strcat(NetworkMessageId , "-", RecipientEmailAddress) 
+    | summarize arg_max(Timestamp, *) by Key 
+    | project Action,ActionType,ActionResult,ThreatTypes,NetworkMessageId 
+); 
+// Optional - get all admin submissions for malware or phish, so we can also count these in the miss bucket. 
+let CloudAppEventsFiltered = materialize( 
+    CloudAppEvents 
+    | where Timestamp between (_startTime .. datetime_add('day', 7, _endTime)) 
+    | where ActionType == "AdminSubmissionSubmitted" 
+    | extend SubmissionType = tostring(parse_json(RawEventData).SubmissionType) 
+    | extend NetworkMessageId = tostring(parse_json(RawEventData).ObjectId) 
+    | where SubmissionType in ("1", "2") 
+    | project SubmissionType,NetworkMessageId 
+); 
+// get the number of threats caught in mailflow 
+let Mal_Phish_Mailflow = toscalar( 
+    EmailEventsThreats 
+    | summarize count() 
+); 
+// get the number of threats caught in mailflow which turned out to be false positives (FPs) so we can correct the calculation 
+let FP_ZAP = toscalar( 
+    EmailPostDeliveryFiltered 
+    | where ThreatTypes !contains "Phish" and ThreatTypes !contains "Malware" and ActionType == "Redelivery" 
+    | join kind=leftsemi (EmailEventsThreats) on NetworkMessageId 
+    | summarize count() 
+); 
+// get the number of threats successfully cleaned up post delivery, ignoring where administrative policy stopped action 
+let FN_ZAP_Successful = toscalar( 
+    EmailPostDeliveryFiltered 
+    | where ActionType in ("Malware ZAP","Phish ZAP") and ActionResult in ("Success","AdminPolicy") 
+    | join kind=leftsemi (EmailEventsClean) on NetworkMessageId 
+    | summarize count() 
+); 
+// get the number of threats unsuccessfully cleaned up post delivery. 
+let FN_ZAP_Unsuccessful = toscalar( 
+    EmailPostDeliveryFiltered 
+    | where ActionType in ("Malware ZAP","Phish ZAP") and ActionResult !in ("Success","AdminPolicy") 
+    | join kind=leftsemi (EmailEventsClean) on NetworkMessageId 
+    | summarize count() 
+); 
+// join the administrative submissions to clean mailflow to find the additional miss 
+let FN_Admin_Submissions = toscalar( 
+    CloudAppEventsFiltered 
+    | join kind=rightsemi (EmailEventsClean) on NetworkMessageId 
+    | summarize count() 
+    ); 
+    // print each result, and run the calculation to work out effectiveness at time of delivery and post delivery. 
+union withsource=Table 
+    (print StatisticName="Mal/Phish Mailflow totals - Minus FPs", Value=toreal(Mal_Phish_Mailflow) - toreal(FP_ZAP)), 
+    (print StatisticName="Admin Mal/Phish FNs Submitted", Value=toreal(FN_Admin_Submissions)), 
+    (print StatisticName="Mal/Phish FPs Reverse Zapped", Value=toreal(FP_ZAP)), 
+    (print StatisticName="Mal / Phish Successfully Zapped", Value=toreal(FN_ZAP_Successful)), 
+    (print StatisticName="Mal / Phish UN-Successfully Zapped", Value=toreal(FN_ZAP_Unsuccessful)), 
+    (print StatisticName="Effectiveness Post Delivery", Value=abs(round(((toreal(FN_Admin_Submissions)+toreal(FN_ZAP_Unsuccessful))/(toreal(Mal_Phish_Mailflow)+toreal(FN_ZAP_Successful)+toreal(FN_ZAP_Unsuccessful)+toreal(FN_Admin_Submissions)-toreal(FP_ZAP))*100-100),2))), 
+    (print StatisticName="Effectiveness Pre-Delivery", Value=abs(round(((toreal(FN_Admin_Submissions)+toreal(FN_ZAP_Unsuccessful)+toreal(FN_ZAP_Successful))/(toreal(Mal_Phish_Mailflow)+toreal(FN_ZAP_Successful)+toreal(FN_ZAP_Unsuccessful)+toreal(FN_Admin_Submissions)-toreal(FP_ZAP))*100-100),2))) 
+| project StatisticName, Value
+
+
+
+//(2)
+
+let Quarantine_Releases = toscalar(EmailPostDeliveryEvents
+| where Action == "Quarantine release" and Timestamp >= ago(30d)
+| summarize arg_min(Timestamp,*) by NetworkMessageId,RecipientEmailAddress
+| join kind=leftouter (EmailEvents | where DeliveryLocation == "Quarantine" and EmailDirection == "Inbound") on NetworkMessageId
+| summarize count(NetworkMessageId));
+let Quarantined_Mailfow = toscalar(EmailEvents | where DeliveryLocation == "Quarantine" and Timestamp >= ago(30d) and EmailDirection == "Inbound"
+| summarize count(NetworkMessageId));
+print
+Quarantine_Releases = toreal(Quarantine_Releases),
+Quarantined_Mailflow = toreal(Quarantined_Mailfow),
+Release_Percentage = abs(round(((toreal(Quarantine_Releases)/toreal(Quarantined_Mailfow))*100),2))
+
+
+
+//(3)
+
+//This query visualises total emails, total detections, total user, and admin email submissions over time summarizing the data daily
+let minTime = toscalar(EmailEvents | summarize min(Timestamp));
+let maxTime = toscalar(EmailEvents | summarize max(Timestamp));
+let baseQuery = EmailEvents
+| extend Key = strcat(NetworkMessageId , "-", RecipientEmailAddress) 
+| summarize arg_max(Timestamp, *) by Key 
+| where isnotempty(Timestamp);
+let totalinbound = baseQuery
+| where EmailDirection == "Inbound"
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Total Inbound Emails";
+let totalintraorg = baseQuery
+| where EmailDirection == "Intra-org"
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Total Intra-org Emails";
+let totaloutbound = baseQuery
+| where EmailDirection == "Outbound"
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Total Outbound Emails";
+let totalwiththreat = baseQuery
+| where isnotempty(ThreatTypes) 
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Total Emails with Threat";
+let phishingcount = baseQuery
+| where ThreatTypes has ('Phish')
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Emails Detected as Phish";
+let malwarecount = baseQuery
+| where ThreatTypes has ('Malware')
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Emails Detected as Malware";
+let spamcount = baseQuery
+| where ThreatTypes has ('Spam')
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Emails Detected as Spam";
+let usersubmissioncount = CloudAppEvents
+| extend Record= (parse_json(RawEventData)).RecordType
+| extend SubmissionState = (parse_json(RawEventData)).SubmissionState
+| where Record == 29 | where ActionType == "UserSubmission"
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Total Emails Reported by Users";
+let adminsubmissioncount = CloudAppEvents
+| extend Record= (parse_json(RawEventData)).RecordType
+| extend SubmissionState = (parse_json(RawEventData)).SubmissionState,SubmissionContentType=tostring((parse_json(RawEventData)).SubmissionContentType)
+| where Record == 29 and ActionType == "AdminSubmissionSubmitted" and SubmissionContentType=="Mail"
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Total Emails Reported by Admins";
+let zapcount = EmailPostDeliveryEvents
+| extend Key = strcat(NetworkMessageId , "-", RecipientEmailAddress) 
+| summarize arg_max(Timestamp, *) by Key 
+| where ActionResult == "Success"
+| where ActionType == "Phish ZAP" or ActionType == "Malware ZAP" or ActionType == "Spam ZAP"
+| make-series Count= count() default = 0 on Timestamp from minTime to maxTime step 1d 
+| extend Details = "Total Emails Removed by ZAP";
+union totalinbound, phishingcount, malwarecount, spamcount, totalintraorg, totaloutbound, totalwiththreat, usersubmissioncount, zapcount, adminsubmissioncount
+| mv-expand Timestamp to typeof(datetime), Count to typeof(long)
+| project Timestamp, Count, Details| project Timestamp, Count, Details
+| order by Timestamp asc
+| render timechart
+
+
+//(4)
+
+UrlClickEvents
+| where ActionType contains "Blocked"
+| summarize count() by Url
+| top 5 by count_
+| sort by count_ desc 
+
+
+//(5)
+
+UrlClickEvents
+| where Workload == "Teams" and ActionType == "ClickBlocked"
+| summarize count() by ThreatTypes
+
+
+//(6)
+
+let _startTime = ago(30d);
+let _endTime = now();
+EmailPostDeliveryEvents
+| where ActionType contains "ZAP" and Timestamp between (_startTime .._endTime ) and ActionResult == "Success" and ActionType in ("Malware ZAP","Phish ZAP")
+| extend Key = strcat(NetworkMessageId , "-", RecipientEmailAddress) 
+| summarize arg_max(Timestamp, *) by Key 
+  | join kind=inner  (
+        EmailEvents
+        | where Timestamp between (['_startTime'] .. ['_endTime'])
+        | where ThreatTypes !contains "Phish" and ThreatTypes !contains "Malware" 
+        | project NetworkMessageId,RecipientEmailAddress,Timestamp)
+        on NetworkMessageId,RecipientEmailAddress
+        | extend TimeDiff = datetime_diff('minute', Timestamp, Timestamp1)
+        | summarize Average_Zap = avg(TimeDiff), percentiles((TimeDiff),50,80,90,99)
+
+
+
+//(7)
+
+UrlClickEvents
+| where ActionType contains "Blocked" and AccountUpn !=""
+| summarize count() by AccountUpn
+| top 5 by count_
+| sort by count_ desc 
+
+
+
+//(8)
+
+EmailEvents
+| where ThreatTypes has_any ("Phish","Malware")
+| summarize count() by RecipientEmailAddress
+| top 10 by count_
+| sort by count_ desc 
+
+
+
+//(9)
+
+let SubjectKeywords = ()
+  {pack_array("authorize", "authenticate", "account", "confirmation", "QR", "login", "password",  "payment", "urgent", "verify","invoice");};
+  EmailEvents
+  | where Timestamp > ago(7d)
+  | where EmailDirection == "Inbound"
+  | where DeliveryAction == "Delivered"
+  | where Subject has_any (SubjectKeywords)
+  | join EmailUrlInfo on NetworkMessageId
+  | where UrlLocation == "QRCode"
+
+//(10)
+
+  EmailEvents
+  | where Timestamp > ago(7d)
+  | where EmailDirection == "Inbound"
+  | where ThreatClassification != ""
+  | summarize count() by ThreatClassification
+  | render piechart 
