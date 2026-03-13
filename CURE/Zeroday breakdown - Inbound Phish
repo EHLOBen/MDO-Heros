@@ -1,0 +1,14 @@
+// Zeroday breakdown - Inbound Phish  (13/03/2026 1.0 - BH)
+let _startTime = ago(30d); 
+let _endTime = now(); 
+EmailEvents
+| where EmailDirection == "Inbound" and Timestamp between (_startTime .. _endTime)
+| where OrgLevelPolicy != "Phishing simulation" and OrgLevelPolicy != "SecOps Mailbox"
+    | where ThreatTypes != "" and DetectionMethods has ("Detonation")
+    | extend MDO_detection = parse_json(DetectionMethods) 
+    | extend FirstDetection = iif(isempty(MDO_detection), "Clean", tostring(bag_keys(MDO_detection)[0])) 
+    | extend FirstSubcategory = iif(FirstDetection != "Clean" and array_length(MDO_detection[FirstDetection]) > 0, strcat(FirstDetection, ": ", tostring(MDO_detection[FirstDetection][0])), "No Detection (clean)") 
+    | where FirstSubcategory in ("Phish: URL detonation","Phish: File detonation")
+| summarize count() by bin(Timestamp,1d)
+
+https://security.microsoft.com/v2/advanced-hunting?query=H4sIAJX_s2kAA52VTW_TQBCG54zEfzA52VJo01biAIIDhAokShEtF6rKclKTGPJR2S6hiB_fZ2Y3zTZOHECWd9ezszPvvDsz3pd9ieSr5FLKXK4kk1u-B3zlrH8gmctCZsie8r5nNUByw3zF9ycZSyEVY8QTy4EcYa9n4yHzoTxDfiB7rJ2F1_JOEnksj2SChxpJyvkaXyXjOdamyCN5yZvJCF8x1np4S-QFsocnc8Px8NTMEMeB_lt2M3QmrH7amRqfuvMHjQXoc4s3CjT7jCoboltgcWbW1X5njYWOIXV8LJG4iKZybVwq2gVjblbiLRHv8TRjSjbiPGUeyQfWGs-Ee5gzFqDV23vica5up8DmCFllVm_Qze7jCvH_nd0z4-WU6Cq-TzxjysgvdhVv5J913OesXWZp5LdYyM3G0nKIpW-8hTdwYpKx5ameGqNbGaMdr61aYWRJA00OxtpzrNj7xJGyXvflcunabqliJ5XvzLoT70SW-Lzb7vfYskuzoGnLeS54vuGrMO-aSTV8xS2IE-kah2-sPjKLXyXKinoqfRbE3JRWVkp159isdli9oPoumf8lqjNybICVzHa1ikvLoDCydg6WGRFGs8oNvZXSelVq-xqX8t8WyUWrx0uL7xVvz1hzjLkI2rE61p_buJnv_8e04t55-Yh8U2VoDQzvmUos85u3FVbi7rsqvN2wj2iUX-QzHSLy0axXXLehf2zdId96YtXhKpBMrQMrd7_tzND32do6unZT938qrBKb_bbL30b_FXfek7Db2AYAAA&timeRangeId=SetInQuery
