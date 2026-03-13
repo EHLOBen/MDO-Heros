@@ -8,3 +8,5 @@ EmailEvents
     | extend FirstDetection = iif(isempty(MDO_detection), "Clean", tostring(bag_keys(MDO_detection)[0])) 
     | extend FirstSubcategory = iif(FirstDetection != "Clean" and array_length(MDO_detection[FirstDetection]) > 0, strcat(FirstDetection, ": ", tostring(MDO_detection[FirstDetection][0])), "No Detection (clean)") 
 | summarize count() by ThreatClassification
+
+https://security.microsoft.com/v2/advanced-hunting?query=H4sIADz6s2kAA52UW0_bQBCF5xmp_8HkyZZaEqjEA4g-lIvggbZS8xahKJdtYsgFOU7TVPz4fnvWURwSjFKt9uLZ2Tlzzs66bnWLrGlDy8xZx3K7tBHzjJbaL3pP1tSmNsGzW_g9WR_LQrZP9DtWXSxz5j7fP4iYEmPIOrLYju0zSA2NJ8wndor92I5Yhwhf7dYS-2AH4DsQI2tzPgcrY2wSbYw9sgt6xwZgxURrgJbYObbNk055bJ6aKOO45H_NbgefEavfOpOD6Xde8FiQvRPffRQ6FFaN5vMMaqxxrhh9nF7pxEVxYlPD8vkVj6DH2J51E57rgtEpSvyGXke0bUWC0lHRqtg2bQmex47IeiqNPJeJLLXSTde2Yjr7g7crWNzD_juZ9JX5aw0iUHzuM3ba9sjsd2LOvPa-l2XIuo9XUtzl27g30txrsx0rIKe6yVg8nPTNYR1XZJzYR7G_VM35e6rJkrPrkTIpNCBGV9Xa5sU4Ys7eidqioh-Y92H1k4rpFlXo9DIykDaZVWuwqtkym3X1-VvJGJfkPBL-QPpXMWlVIj6I3xd6Q6oFxQKD6lyD6mcad-v9_zmttQ8o37BHO_WK-VopleC5uq0XcZlTQWOpltpfvade8apz_X38213u8U_5B9QOVF-kBQAA&timeRangeId=SetInQuery
