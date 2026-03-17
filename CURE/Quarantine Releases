@@ -1,0 +1,15 @@
+// Quarantine Stats - Release Percentage (17/03/2026 1.0 - BH)
+let _startTime = ago(30d); 
+let _endTime = now(); 
+let Quarantined_Mailfow = materialize ( EmailEvents | where DeliveryLocation == "Quarantine" and Timestamp between (_startTime .. _endTime) and EmailDirection == "Inbound" and OrgLevelPolicy != "Phishing simulation" and OrgLevelPolicy != "SecOps Mailbox"
+|project NetworkMessageId,RecipientEmailAddress);
+let Quarantine_Releases = toscalar(EmailPostDeliveryEvents
+| where Action == "Quarantine release" and Timestamp between (_startTime .. _endTime)
+| join kind=inner (Quarantined_Mailfow) on NetworkMessageId, RecipientEmailAddress
+| summarize count());
+let Quarantined_Mailfow_Count = toscalar(Quarantined_Mailfow | summarize count());
+print
+Quarantine_Releases = toreal(Quarantine_Releases),
+Quarantined_Mailflow = toreal(Quarantined_Mailfow_Count),
+Release_Percentage = abs(round(((toreal(Quarantine_Releases)/toreal(Quarantined_Mailfow_Count))*100),2))
+https://security.microsoft.com/v2/advanced-hunting?query=H4sIAFIzuWkAA7VVTU_CQBCds4n_oXIqRkUh0YPx4AeJJioo3gm0iNVSSFtEDT_eN68FWtoKGE2z2-3szNv3Zme3FamIIQ8ylo74aJ6E4qDvwdrCuIMWYLyP9giri9aBReeb6H2x0Hv07NNqypGcAPVQauireFflGPYjOcA4QrqQaynLtmwRL4SlDcyQHEJ5AoMBsc7QFHcI1BqibUSdwpaO1PXtpSgPMRNEZf3ztNpAuYPFgdczIyOUAfWrSgcjF_1XrNGQOmc1oi7vcQ40U1O0ibwwSn2vmDWHPr58yi3wLeI6GHlcSdcq5TIrMQOqz5grjDI1kBFsXaqaoO8RyyzI5AGebK7KCfSFniv0yt3K4XiDry5sY0Yl2TUQ04e6HpW6qI4hdVvQbMhOHN9EZhwwfKG-PmwBuYzhu8jJ5rgt8m0gJ7oHs71Uph-Y1f2fYs7H92uszJD7OHdD2N8Qo5kN4jq-wdp7rHgLSCO0aIcXWTqHh808aZTW2aoqay-doCCushAMAtaEyxgzsUqTc2GmipI1F6lLV9157u7ln3M_xeq_K27G9hXcHCK88W2Do749alDc9U6q1nCkcvV-Ghvs6IxnABYD-vjz82_FJyDkDbPO3md5t-VyjlJUB-veVZvxHNFDrfq1aaX6tLoF7LKRZeS9aJ20Fjdx865e6eeMzlZNs2kX_LOi_0wXPibviOh2M_n8TnPlDxSUZRd_zUM8qqZKyzeeX3vzsAcAAA&timeRangeId=SetInQuery
