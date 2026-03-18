@@ -1,0 +1,12 @@
+// Threat breakdown - Inbound (18/03/2026 1.0 - BH)
+let _startTime = ago(30d); 
+let _endTime = now(); 
+EmailEvents
+    | where EmailDirection == "Inbound" and Timestamp between (_startTime .. _endTime)
+    and OrgLevelPolicy != "Phishing simulation" and OrgLevelPolicy != "SecOps Mailbox"
+    | extend MDO_detection = parse_json(DetectionMethods) 
+    | extend FirstDetection = iif(isempty(MDO_detection), "Clean", tostring(bag_keys(MDO_detection)[0])) 
+    | extend FirstSubcategory = iif(FirstDetection != "Clean" and array_length(MDO_detection[FirstDetection]) > 0, strcat(FirstDetection, ": ", tostring(MDO_detection[FirstDetection][0])), "No Detection (clean)") 
+| summarize count() by FirstDetection
+
+https://security.microsoft.com/v2/advanced-hunting?query=H4sIAB97umkAA52US0_bUBCFzxqp_8HNypZ4BCohREUX5aFWKgUJdlEUOYkbDE5AidM0VX58vxnbkAQworLuwzN35sw5c-0d7SjQtW40VqJYOW_dcn-nvu410wjbFuM7uy6WKWuf91C7OiC-qU_Me6x72se-q232RcxXfVOkD9pQRk7L3tGENQYjBzfVEHugI0asAdlDsjXJH-kzttXIxJFXo0ZeY7h0_hRvzJmM3W-PycE0T1A-C8YMzokzDZYiTpjN1iMmJfPIUQynsca_4RUXSlQVFcyGenAVreoZc-JZwleYb_M85xat1FvhXBA70A_8xivTJdVkRPQ0x_uxrPMSZilYNo84H7C3rFPOxo-8Gu_Oe-W6XMBuwvt5qZgp8gfvur4J1rxkZadPiOywT9y6qm9ATtNlgqejW1bzhMSsnz53yw37PqeisuOv4555P03357kK5JTnF1ipo1vvcliHNRVH2nQ9jv1mxq6lWXK8hjQudQ_Rxu50hy8pIefkjawt7n2b9T2sruhqlyyxe-37GXvPlpnVa1B1d5nN082wroyZ59ScOf7A9a9j0qpFbDu_L4ymq1YoVjCor7VQ_dDnl_X-_5qetC9QfmIPXtQr5K1SKuJk1a2Fc5lyg4auWqq__n33yj9G7v8o-y_M37iXlu0fgetEBJgFAAA&timeRangeId=SetInQuery
